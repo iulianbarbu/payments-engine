@@ -1,9 +1,9 @@
 #[derive(thiserror::Error, Debug, Clone, PartialEq)]
 pub enum Error {
-    #[error("Funds exceeded")]
-    FundsExceeded,
-    #[error("Operation not supported")]
-    OperationNotSupported,
+    #[error("Missing amount for tx: {0}")]
+    MissingAmount(u32),
+    #[error("Total overflow")]
+    TotalOverflow,
     #[error("Transaction not found")]
     TxNotFound,
     #[error("Account locked: {0}")]

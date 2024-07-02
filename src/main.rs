@@ -39,9 +39,9 @@ async fn main() -> anyhow::Result<()> {
         println!(
             "{},{},{},{},{}",
             inner.client_id(),
-            inner.available() as f64 / 10000f64,
-            inner.held() as f64 / 10000f64,
-            inner.total() as f64 / 10000f64,
+            inner.available(),
+            inner.held(),
+            inner.total(),
             inner.is_locked()
         );
     }
