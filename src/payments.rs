@@ -703,7 +703,7 @@ mod tests {
                 .await
                 .available()
                 .to_string(),
-            "2"
+            "2.0"
         );
     }
 }
