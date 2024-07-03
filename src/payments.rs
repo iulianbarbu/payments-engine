@@ -1,12 +1,12 @@
-use std::sync::Arc;
+use std::{str::FromStr, sync::Arc};
 
 use crate::error::Error;
 use bigdecimal::BigDecimal;
 use csv_async::Trim;
 use futures::StreamExt;
-use serde::Deserialize;
+use serde::{de, Deserialize};
 use tokio::{io::AsyncRead, sync::Mutex};
-use tracing::error;
+use tracing::debug;
 
 use crate::{
     account::Account,
@@ -31,6 +31,26 @@ pub trait TxHandle<A: AccountsDal + Send + Sync + Clone, T: TxsDal + Send + Sync
     ) -> impl std::future::Future<Output = Result<(), Error>> + Send;
 }
 
+// There is a bug with the `serde` feature of the bigdecimal create, which if used to deserialize
+// strings to `BigDecimal` will not work correctly when we'll subtract 0.9999 (the maximum decimals)
+// the amounts can have (in case of a withdawal, and possibly for additions with deposits too), so
+// I needed to implement a custom deserializer to handle this correctly.
+fn deserialize_explicitly<'de, D>(deserializer: D) -> Result<Option<BigDecimal>, D::Error>
+where
+    D: de::Deserializer<'de>,
+{
+    let s: Option<&str> = de::Deserialize::deserialize(deserializer).ok();
+    if let Some(inner) = s {
+        if !inner.is_empty() {
+            return Ok(Some(
+                BigDecimal::from_str(inner).map_err(de::Error::custom)?,
+            ));
+        }
+    }
+
+    Ok(None)
+}
+
 // Transaction model
 #[derive(Deserialize, Debug)]
 pub struct Tx {
@@ -39,6 +59,7 @@ pub struct Tx {
     #[serde(rename(deserialize = "tx"))]
     id: u32,
     #[serde(rename(deserialize = "amount"))]
+    #[serde(deserialize_with = "deserialize_explicitly")]
     amount: Option<BigDecimal>,
     #[serde(skip_deserializing)]
     disputed: bool,
@@ -236,12 +257,12 @@ impl<A: AccountsDal + Send + Sync + Clone, T: TxsDal + Send + Sync + Clone> Engi
             let tx: Tx = match record {
                 Ok(inner) => inner,
                 Err(err) => {
-                    error!("Errored while processing transaction: {err}");
+                    debug!("Errored while processing transaction: {err}");
                     continue;
                 }
             };
             let _ = tx.handle(self).await.map_err(|err| {
-                error!("TX handling: {err}");
+                debug!("TX handling: {err}");
                 err
             });
             if tx.storable() {
@@ -685,6 +706,4 @@ mod tests {
             "2"
         );
     }
-    // TODO handle locked
-    // TODO check again if dispute should work for withdrawal too
 }
